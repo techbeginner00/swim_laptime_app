@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="width=device-width, initial-scale=1.0, noindex">
+    <title>水泳ラップタイム計測アプリ v2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 90vw;
+            margin: 0 auto;
+            aspect-ratio: 16 / 9;
+            background-color: #1a202c;
+        }
+        #videoPlayer, #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        #overlayCanvas {
+            pointer-events: auto;
+            z-index: 10;
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.5rem;
+        }
+        .button-primary, .button-secondary, .button-danger, .button-warning {
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .button-primary { background-color: #4F46E5; } /* Indigo */
+        .button-primary:hover { background-color: #4338CA; }
+        .button-secondary { background-color: #6B7280; } /* Gray */
+        .button-secondary:hover { background-color: #4B5563; }
+        .button-danger { background-color: #DC2626; } /* Red */
+        .button-danger:hover { background-color: #B91C1C; }
+        .button-warning { background-color: #F59E0B; } /* Amber */
+        .button-warning:hover { background-color: #D97706; }
+
+        .time-display { font-size: 1.5rem; font-weight: 600; color: #1F2937; }
+        .lap-time-table { width: 100%; margin-top: 1rem; border-collapse: collapse; }
+        .lap-time-table th, .lap-time-table td { border: 1px solid #D1D5DB; padding: 0.5rem; text-align: left; }
+        .lap-time-table th { background-color: #F3F4F6; }
+        #messageArea { min-height: 24px; }
+        select {
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #D1D5DB;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+    <div class="container mx-auto max-w-4xl">
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl font-bold text-indigo-600">ラップタイム計測アプリ</h1>
+        </header>
+
+        <main>
+            <section class="mb-6 p-4 bg-white rounded-lg shadow">
+                <label for="videoFile" class="block text-sm font-medium text-gray-700 mb-2">動画ファイルを選択:</label>
+                <input type="file" id="videoFile" accept="video/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                <p id="messageArea" class="text-sm mt-2"></p>
+            </section>
+
+            <section id="playerSection" class="mb-6 p-4 bg-white rounded-lg shadow hidden">
+                <div class="video-container mb-4 rounded-md overflow-hidden">
+                    <video id="videoPlayer" playsinline></video>
+                    <canvas id="overlayCanvas"></canvas>
+                </div>
+
+                <div class="mb-4 text-center">
+                    <p class="text-sm text-gray-600 mb-1" id="instructionText">動画を再生し、タイムを記録してください。</p>
+                    <p class="time-display" id="currentTimeDisplay">0.000 s</p>
+                </div>
+
+                <div class="controls-grid mb-4">
+                    <button id="playPauseBtn" class="button-primary">再生</button>
+                    <button id="prevFrameBtn" class="button-secondary">コマ戻る</button>
+                    <button id="nextFrameBtn" class="button-secondary">コマ進む</button>
+                    <button id="recordTimeBtn" class="button-primary">タイム記録 (1/21)</button>
+                </div>
+
+                <div class="mb-4 p-3 bg-indigo-50 rounded-lg">
+                    <h3 class="text-lg font-medium text-indigo-700 mb-2">ライン描画設定</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="lineDrawingMode" class="block text-sm font-medium text-gray-700">描画モード:</label>
+                            <select id="lineDrawingMode">
+                                <option value="none" selected>ライン描画なし</option>
+                                <option value="pattern1">4点指定 + 5分割線</option>
+                                <option value="pattern2">2点指定線</option>
+                            </select>
+                        </div>
+                        <div id="pattern1Options" class="hidden">
+                            <label for="pattern1Direction" class="block text-sm font-medium text-gray-700">5分割する方向:</label>
+                            <select id="pattern1Direction">
+                                <option value="long">長辺を分割</option>
+                                <option value="short">短辺を分割</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="controls-grid mb-4">
+                    <button id="resetLinesBtn" class="button-warning">ラインリセット</button>
+                    <button id="resetLapTimesBtn" class="button-warning">ラップタイムリセット</button>
+                    <button id="resetAllBtn" class="button-danger">全てリセット (動画選択から)</button>
+                </div>
+            </section>
+
+            <section id="lapTimesSection" class="p-4 bg-white rounded-lg shadow hidden">
+                <h2 class="text-xl font-semibold mb-2 text-indigo-700">記録タイム</h2>
+                <table class="lap-time-table">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>スプリットタイム</th>
+                            <th>ラップタイム</th>
+                            <th>合計タイム</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lapTimesBody"></tbody>
+                </table>
+            </section>
+        </main>
+        <footer class="mt-8 text-center text-sm text-gray-500">URLを知っている人だけに限定公開中</footer>
+    </div>
+
+    <script>
+        // DOM Elements
+        const videoFile = document.getElementById('videoFile');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const ctx = overlayCanvas.getContext('2d');
+        const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const prevFrameBtn = document.getElementById('prevFrameBtn');
+        const nextFrameBtn = document.getElementById('nextFrameBtn');
+        const recordTimeBtn = document.getElementById('recordTimeBtn');
+        
+        const lineDrawingModeSelect = document.getElementById('lineDrawingMode');
+        const pattern1OptionsDiv = document.getElementById('pattern1Options');
+        const pattern1DirectionSelect = document.getElementById('pattern1Direction');
+
+        const resetLinesBtn = document.getElementById('resetLinesBtn');
+        const resetLapTimesBtn = document.getElementById('resetLapTimesBtn');
+        const resetAllBtn = document.getElementById('resetAllBtn');
+        
+        const lapTimesBody = document.getElementById('lapTimesBody');
+        const playerSection = document.getElementById('playerSection');
+        const lapTimesSection = document.getElementById('lapTimesSection');
+        const instructionText = document.getElementById('instructionText');
+        const messageArea = document.getElementById('messageArea');
+
+        // State Variables
+        let videoFPS = 30; 
+        let collectedPoints = []; 
+        let recordedTimes = []; 
+        let videoLoaded = false;
+        const MAX_LAP_RECORDS = 21;
+
+        // --- Initialization and Event Listeners ---
+        videoFile.addEventListener('change', handleFileSelect);
+        videoPlayer.addEventListener('loadedmetadata', handleVideoMetadata);
+        videoPlayer.addEventListener('timeupdate', updateCurrentTimeDisplay);
+        videoPlayer.addEventListener('play', () => { playPauseBtn.textContent = '一時停止'; console.log("Video playing"); });
+        videoPlayer.addEventListener('pause', () => { playPauseBtn.textContent = '再生'; console.log("Video paused"); });
+        videoPlayer.addEventListener('error', (e) => { 
+            console.error("Video Error:", e);
+            showMessage("動画の読み込みまたは再生中にエラーが発生しました。", true);
+        });
+        
+        overlayCanvas.addEventListener('click', handleCanvasClick);
+        
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        prevFrameBtn.addEventListener('click', () => stepFrame(-1));
+        nextFrameBtn.addEventListener('click', () => stepFrame(1));
+        recordTimeBtn.addEventListener('click', recordLapTime);
+
+        lineDrawingModeSelect.addEventListener('change', handleLineModeChange);
+        pattern1DirectionSelect.addEventListener('change', () => { 
+            if (lineDrawingModeSelect.value === 'pattern1' && collectedPoints.length === 4) {
+                drawLines();
+            }
+        });
+
+        resetLinesBtn.addEventListener('click', resetLinesOnly);
+        resetLapTimesBtn.addEventListener('click', resetLapTimesOnly);
+        resetAllBtn.addEventListener('click', resetAll);
+
+        // --- Core Functions ---
+        function showMessage(message, isError = false) {
+            messageArea.textContent = message;
+            messageArea.className = `text-sm mt-2 ${isError ? 'text-red-600' : 'text-green-600'}`;
+            if (isError) console.error("App Message:", message);
+            else console.log("App Message:", message);
+        }
+
+        function handleFileSelect(event) {
+            console.log("handleFileSelect triggered");
+            const file = event.target.files[0];
+            if (file) {
+                console.log("File selected:", file.name, file.type);
+                if (file.type.startsWith('video/')) {
+                    const fileURL = URL.createObjectURL(file);
+                    console.log("ObjectURL created:", fileURL);
+                    
+                    fullResetStatesAndUI(); // Reset states before loading new video
+                    
+                    videoPlayer.src = fileURL;
+                    videoPlayer.load(); // Explicitly tell the video element to load the new source
+
+                    playerSection.classList.remove('hidden');
+                    lapTimesSection.classList.remove('hidden');
+                    
+                    videoLoaded = true; 
+                    recordTimeBtn.disabled = false; 
+                    updateRecordTimeButtonText();
+                    handleLineModeChange(); // Update instructions based on default line mode
+                    showMessage('動画をロード中...', false); // Message indicating loading
+                } else {
+                    showMessage('有効な動画ファイルを選択してください。', true);
+                    playerSection.classList.add('hidden');
+                    lapTimesSection.classList.add('hidden');
+                    videoLoaded = false;
+                }
+            } else {
+                console.log("No file selected or file selection cancelled.");
+            }
+        }
+
+        function handleVideoMetadata() {
+            console.log("handleVideoMetadata triggered");
+            console.log("Video dimensions:", videoPlayer.videoWidth, "x", videoPlayer.videoHeight);
+            console.log("Video duration:", videoPlayer.duration);
+
+            const aspectRatio = videoPlayer.videoWidth / videoPlayer.videoHeight;
+            const videoContainer = document.querySelector('.video-container');
+            videoContainer.style.aspectRatio = aspectRatio;
+            overlayCanvas.width = videoPlayer.videoWidth;
+            overlayCanvas.height = videoPlayer.videoHeight;
+
+            estimateFPS().then(fps => {
+                videoFPS = fps;
+                console.log(`Estimated FPS: ${videoFPS.toFixed(2)}`);
+                showMessage(`動画読み込み完了。推定FPS: ${videoFPS.toFixed(2)}`, false);
+            }).catch(err => {
+                console.warn("FPS推定失敗、デフォルト30FPS使用。", err);
+                videoFPS = 30;
+                showMessage(`FPS推定失敗。デフォルトFPS(${videoFPS})使用。動画によってはコマ送りが不正確になる場合があります。`, true);
+            });
+            updateCurrentTimeDisplay();
+        }
+
+        async function estimateFPS() {
+            console.log("estimateFPS started");
+            return new Promise((resolve, reject) => {
+                if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
+                    console.warn('requestVideoFrameCallback is not supported.');
+                    reject(new Error('requestVideoFrameCallback is not supported.'));
+                    return;
+                }
+                let frameCount = 0, startTime = performance.now(), rVFCSupport = true;
+                const maxFramesToSample = 60; // Sample up to 60 frames or 2 seconds
+                let pipListenerAdded = false;
+
+                function callback(now, metadata) {
+                    frameCount++;
+                    if (frameCount >= maxFramesToSample || (now - startTime) > 2000) {
+                        if (pipListenerAdded) videoPlayer.removeEventListener('enterpictureinpicture', tempPauseForFPSDuringEstimation);
+                        videoPlayer.pause();
+                        const averageFPS = frameCount / ((now - startTime) / 1000);
+                        if (averageFPS > 0) {
+                            console.log("FPS estimation successful:", averageFPS);
+                            resolve(averageFPS);
+                        } else {
+                            console.warn('Could not estimate FPS (average was 0 or less).');
+                            reject(new Error('Could not estimate FPS.'));
+                        }
+                        return;
+                    }
+                    if (rVFCSupport) try { videoPlayer.requestVideoFrameCallback(callback); } catch (e) { rVFCSupport = false; console.warn("rVFC error in loop:", e); }
+                }
+                function tempPauseForFPSDuringEstimation() { if (document.pictureInPictureElement === videoPlayer) videoPlayer.pause(); }
+                
+                videoPlayer.addEventListener('enterpictureinpicture', tempPauseForFPSDuringEstimation);
+                pipListenerAdded = true;
+
+                videoPlayer.currentTime = 0;
+                videoPlayer.play().then(() => {
+                    console.log("Video playing for FPS estimation");
+                    try { videoPlayer.requestVideoFrameCallback(callback); }
+                    catch (e) { 
+                        rVFCSupport = false; 
+                        console.warn("Initial rVFC failed:", e);
+                        if (pipListenerAdded) videoPlayer.removeEventListener('enterpictureinpicture', tempPauseForFPSDuringEstimation);
+                        reject(new Error('rVFC failed on initial call.')); 
+                    }
+                }).catch(err => {
+                    console.error(`Video play failed for FPS: ${err.message}`);
+                    if (pipListenerAdded) videoPlayer.removeEventListener('enterpictureinpicture', tempPauseForFPSDuringEstimation);
+                    reject(new Error(`Video play failed for FPS: ${err.message}`));
+                });
+            });
+        }
+
+        function updateCurrentTimeDisplay() {
+            if (videoLoaded) currentTimeDisplay.textContent = `${videoPlayer.currentTime.toFixed(3)} s`;
+        }
+
+        function togglePlayPause() {
+            if (!videoLoaded) return;
+            videoPlayer.paused || videoPlayer.ended ? videoPlayer.play() : videoPlayer.pause();
+        }
+
+        function stepFrame(direction) {
+            if (!videoLoaded) return;
+            if (!videoPlayer.paused) videoPlayer.pause();
+            const frameDuration = 1 / videoFPS;
+            const newTime = videoPlayer.currentTime + (direction * frameDuration);
+            videoPlayer.currentTime = Math.max(0, Math.min(newTime, videoPlayer.duration));
+            console.log(`Step frame: ${direction}, newTime: ${videoPlayer.currentTime.toFixed(3)}`);
+        }
+        
+        function handleLineModeChange() {
+            console.log("handleLineModeChange, new mode:", lineDrawingModeSelect.value);
+            resetLinesOnly(); 
+            const mode = lineDrawingModeSelect.value;
+            if (mode === 'pattern1') {
+                pattern1OptionsDiv.classList.remove('hidden');
+            } else { // 'pattern2' or 'none'
+                pattern1OptionsDiv.classList.add('hidden');
+            }
+            updateInstructionTextForLines(); // Update instruction text based on the new mode
+        }
+
+        function updateInstructionTextForLines() {
+            if (!videoLoaded && lineDrawingModeSelect.value !== 'none') {
+                instructionText.textContent = "まず動画をロードしてください。";
+                return;
+            }
+            const mode = lineDrawingModeSelect.value;
+            let requiredPoints = 0;
+            let type = "";
+
+            if (mode === 'pattern1') { requiredPoints = 4; type = "プールの四隅"; }
+            else if (mode === 'pattern2') { requiredPoints = 2; type = "2点"; }
+            else { instructionText.textContent = "動画を再生し、タイムを記録してください。"; return; }
+
+            if (collectedPoints.length < requiredPoints) {
+                instructionText.textContent = `${type}を指定するため、動画上でクリックしてください (${collectedPoints.length}/${requiredPoints}点)。`;
+            } else {
+                instructionText.textContent = `${type}の指定完了。ラインが描画されました。`;
+            }
+        }
+
+        function handleCanvasClick(event) {
+            if (!videoLoaded) return;
+            const mode = lineDrawingModeSelect.value;
+            if (mode === 'none') return; 
+
+            const rect = overlayCanvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+            const videoCoordX = (clickX / rect.width) * videoPlayer.videoWidth;
+            const videoCoordY = (clickY / rect.height) * videoPlayer.videoHeight;
+            
+            console.log(`Canvas click: display(${clickX.toFixed(0)}, ${clickY.toFixed(0)}), video(${videoCoordX.toFixed(0)}, ${videoCoordY.toFixed(0)})`);
+
+            let maxPoints = 0;
+            if (mode === 'pattern1') maxPoints = 4;
+            else if (mode === 'pattern2') maxPoints = 2;
+
+            if (collectedPoints.length < maxPoints) {
+                collectedPoints.push({ x: videoCoordX, y: videoCoordY });
+                drawLines(); 
+            }
+            updateInstructionTextForLines();
+        }
+        
+        function drawLines() {
+            if (!videoLoaded || !overlayCanvas.width || !overlayCanvas.height) return;
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            console.log("Drawing lines, mode:", lineDrawingModeSelect.value, "points:", collectedPoints.length);
+
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+            const pointRadius = Math.max(5, (overlayCanvas.width || videoPlayer.videoWidth || 300) / 200); // Fallback width
+            collectedPoints.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, pointRadius, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+
+            const mode = lineDrawingModeSelect.value;
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+            ctx.lineWidth = Math.max(2, (overlayCanvas.width || videoPlayer.videoWidth || 300) / 500);
+
+            if (mode === 'pattern1' && collectedPoints.length === 4) {
+                drawPattern1Lines();
+            } else if (mode === 'pattern2' && collectedPoints.length === 2) {
+                drawPattern2Lines();
+            }
+        }
+
+        function drawPattern1Lines() {
+            const [p0, p1, p2, p3] = collectedPoints; 
+            
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y);
+            ctx.closePath(); ctx.stroke();
+
+            const dist01 = Math.hypot(p1.x - p0.x, p1.y - p0.y); 
+            const dist12 = Math.hypot(p2.x - p1.x, p2.y - p1.y); 
+
+            let S1_start, S1_end, S2_start, S2_end;
+            const direction = pattern1DirectionSelect.value; 
+
+            if ((direction === 'long' && dist01 >= dist12) || (direction === 'short' && dist01 < dist12)) {
+                S1_start = p0; S1_end = p1;
+                S2_start = p3; S2_end = p2; 
+            } else {
+                S1_start = p1; S1_end = p2;
+                S2_start = p0; S2_end = p3;
+            }
+
+            for (let i = 1; i < 5; i++) { 
+                const t = i / 5;
+                const x1 = S1_start.x + t * (S1_end.x - S1_start.x);
+                const y1 = S1_start.y + t * (S1_end.y - S1_start.y);
+                const x2 = S2_start.x + t * (S2_end.x - S2_start.x);
+                const y2 = S2_start.y + t * (S2_end.y - S2_start.y);
+                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            }
+            console.log("Pattern 1 lines drawn.");
+        }
+
+        function drawPattern2Lines() {
+            const [p0, p1] = collectedPoints;
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.stroke();
+            console.log("Pattern 2 line drawn.");
+        }
+
+        function recordLapTime() {
+            if (!videoLoaded || recordedTimes.length >= MAX_LAP_RECORDS) return;
+            recordedTimes.push(videoPlayer.currentTime);
+            updateRecordTimeButtonText();
+            calculateAndDisplayLapTimes();
+            console.log("Lap time recorded:", videoPlayer.currentTime.toFixed(3), "Total records:", recordedTimes.length);
+        }
+        
+        function updateRecordTimeButtonText() {
+            const count = recordedTimes.length;
+            recordTimeBtn.textContent = `タイム記録 (${count}/${MAX_LAP_RECORDS})`;
+            recordTimeBtn.disabled = count >= MAX_LAP_RECORDS;
+        }
+
+        function calculateAndDisplayLapTimes() {
+            lapTimesBody.innerHTML = '';
+            if (recordedTimes.length === 0) return;
+
+            for (let i = 0; i < recordedTimes.length; i++) {
+                const row = lapTimesBody.insertRow();
+                row.insertCell().textContent = i + 1; 
+                row.insertCell().textContent = recordedTimes[i].toFixed(3) + " s"; 
+                if (i > 0) {
+                    const lap = recordedTimes[i] - recordedTimes[i-1];
+                    row.insertCell().textContent = lap.toFixed(3) + " s"; 
+                } else {
+                    row.insertCell().textContent = "-";
+                }
+                if (i > 0) {
+                    const time = recordedTimes[i] - recordedTimes[0];
+                    row.insertCell().textContent = time.toFixed(3) + " s"; 
+                } else {
+                    row.insertCell().textContent = "-";
+                }
+            }
+        }
+        
+        // --- Reset Functions ---
+        function resetLinesOnly() {
+            console.log("Resetting lines only.");
+            collectedPoints = [];
+            if (videoLoaded && overlayCanvas.width > 0 && overlayCanvas.height > 0) {
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            }
+            updateInstructionTextForLines(); 
+            /*showMessage("ライン描画をリセットしました。", false);*/
+        }
+
+        function resetLapTimesOnly() {
+            console.log("Resetting lap times only.");
+            recordedTimes = [];
+            lapTimesBody.innerHTML = '';
+            updateRecordTimeButtonText();
+            showMessage("ラップタイムをリセットしました。", false);
+        }
+        
+        function fullResetStatesAndUI() { 
+            console.log("Full reset of states and UI (except file input).");
+            videoPlayer.pause();
+            if (videoPlayer.src && videoPlayer.src.startsWith('blob:')) { // Revoke old object URL if exists
+                URL.revokeObjectURL(videoPlayer.src);
+                console.log("Revoked old ObjectURL:", videoPlayer.src);
+            }
+            videoPlayer.removeAttribute('src'); // Important to remove src before setting a new one later or for full reset
+            videoPlayer.currentTime = 0;
+            playPauseBtn.textContent = '再生';
+            
+            videoLoaded = false; // Set videoLoaded to false before further UI updates that might depend on it
+
+            resetLinesOnly(); 
+            resetLapTimesOnly(); 
+            
+            lineDrawingModeSelect.value = 'none'; 
+            // handleLineModeChange(); // This will be called in handleFileSelect after videoLoaded is true
+            
+            // Clear canvas explicitly here as well, in case resetLinesOnly didn't catch it due to videoLoaded state
+            if (overlayCanvas.width > 0 && overlayCanvas.height > 0) {
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            }
+            instructionText.textContent = "動画を再生し、タイムを記録してください。"; // Default instruction
+            // showMessage("状態をリセットしました。", false); // This message might be overridden by handleFileSelect's message
+        }
+
+        function resetAll() { 
+            console.log("Resetting ALL (including file input).");
+            fullResetStatesAndUI(); // Resets most things
+
+            videoFile.value = ''; // Clear file input last
+            
+            playerSection.classList.add('hidden');
+            lapTimesSection.classList.add('hidden');
+            
+            showMessage("全てリセットしました。新しい動画を選択してください。", false);
+        }
+
+        // Initial UI state
+        updateRecordTimeButtonText();
+        handleLineModeChange(); // Set initial instruction text based on default line mode
+        console.log("App initialized.");
+
+    </script>
+</body>
+</html>
