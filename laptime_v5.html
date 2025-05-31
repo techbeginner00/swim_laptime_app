@@ -86,14 +86,20 @@
                 </div>
 
                 <div class="mb-4 text-center">
-                        <p class="text-sm text-gray-600 mb-1" id="instructionText">動画を再生し、タイムを記録してください。</p>
+                    <p class="text-sm text-gray-600 mb-1" id="instructionText">動画を再生し、タイムを記録してください。</p>
+                        <span class="text-xs text-gray-500 ml-2">
+                            (再生:Space, 一時停止:Space)<br>
+                            (コマ戻し:←, コマ送り:→ / 長押しで連続)<br>
+                            (5秒戻し:Shift+←, 5秒スキップ:Shift+→)<br>
+                            (タイム記録:Enter)
+                        </span>
                     <p class="time-display" id="currentTimeDisplay">0.000 s</p>
                 </div>
                 <div class="controls-grid mb-4">
-                    <button id="playPauseBtn" class="button-primary">再生/一時停止（space）</button>
-                    <button id="prevFrameBtn" class="button-secondary">コマ戻る<br>（← / Shift+←）</button>
-                    <button id="nextFrameBtn" class="button-secondary">コマ進む<br>（→ / Shift+→）</button>
-                    <button id="recordTimeBtn" class="button-primary">タイム記録 （Enter）<br>(1/21)</button>
+                    <button id="playPauseBtn" class="button-primary">再生/一時停止</button>
+                    <button id="prevFrameBtn" class="button-secondary">コマ戻る</button>
+                    <button id="nextFrameBtn" class="button-secondary">コマ進む</button>
+                    <button id="recordTimeBtn" class="button-primary">タイム記録(1/21)</button>
                 </div>
 
                 <div class="mb-4 p-3 bg-indigo-50 rounded-lg">
