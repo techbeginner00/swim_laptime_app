@@ -152,7 +152,7 @@
         <!-- UI Overlays -->
         <div id="tables-column" class="ui-overlay">
             <section id="lapTimesSection" class="mb-4">
-                <h2 class="text-lg font-semibold">通過タイム (Enter)</h2>
+                <h2 class="text-lg font-semibold">通過タイム (A)</h2>
                 <table class="lap-time-table">
                     <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>トータル</th></tr></thead>
                     <tbody id="lapTimesBody"></tbody>
@@ -188,7 +188,7 @@
                 <button type="button" id="playPauseBtn" class="button-primary">再生/一時停止 (Space)</button>
                 <button type="button" id="prevFrameBtn" class="button-secondary">コマ戻る (←)</button>
                 <button type="button" id="nextFrameBtn" class="button-secondary">コマ進む (→)</button>
-                <button type="button" id="recordLapBtn" class="button-primary">通過 (Enter)</button>
+                <button type="button" id="recordLapBtn" class="button-primary">通過 (A)</button>
                 <button type="button" id="recordTempoBtn" class="button-primary">テンポ (S)</button>
                 <button type="button" id="recordStrokeBtn" class="button-primary">ストローク (D)</button>
             </div>
@@ -198,8 +198,8 @@
                 <button type="button" id="resetAllTimesBtn" class="button-warning">全タイムリセット(X)</button>
                 <button type="button" id="resetAllBtn" class="button-danger">動画選択に戻る</button>
             </div>
-             <p class="text-xs text-gray-500 mt-2 text-center">
-                (5秒スキップ:Shift+←,→) (拡大/縮小:Q/W, ドラッグ移動) (ライン描画:Z) (表:E) (操作パネル:C) (最新削除:Esc+S/D)
+             <p id="shortcuts-info" class="text-xs text-gray-500 mt-2 text-center">
+                (5秒スキップ:Shift+←,→) (拡大/縮小:Q/W, ドラッグ移動) (ライン描画:Z) (表:E) (最新削除:Shift+A/S/D) (操作パネル表示:R)
             </p>
         </div>
     </main>
@@ -232,6 +232,7 @@
         const strokeCountDisplay = document.getElementById('strokeCountDisplay');
         const instructionText = document.getElementById('instructionText');
         const messageArea = document.getElementById('messageArea');
+        const shortcutsInfo = document.getElementById('shortcuts-info');
 
         // State
         let videoFPS = 30;
@@ -613,35 +614,30 @@
             const releasedKey = event.code;
             
             if (videoLoaded && !event.repeat) {
-                const escIsPressed = keysPressed['Escape'];
-                
-                if (escIsPressed) {
-                    if (releasedKey === 'KeyS') { deleteLastTime('tempo'); }
-                    else if (releasedKey === 'KeyD') { 
-                        const record = timeRecords['stroke'];
-                        if (record) {
-                            record.data = [];
-                            record.render();
-                            showMessage('ストローク数をリセットしました', false);
-                        }
+                const shiftIsPressed = keysPressed['ShiftLeft'] || keysPressed['ShiftRight'];
+
+                if (shiftIsPressed) {
+                    switch(releasedKey) {
+                        case 'KeyA': deleteLastTime('lap'); break;
+                        case 'KeyS': deleteLastTime('tempo'); break;
+                        case 'KeyD': deleteLastTime('stroke'); break;
+                        case 'ArrowRight': skipTime(5); break;
+                        case 'ArrowLeft': skipTime(-5); break;
                     }
                 } 
                 else {
                     switch(releasedKey) {
                         case 'Space': togglePlayPause(); break;
-                        case 'Enter': recordTime('lap'); break;
+                        case 'KeyA': recordTime('lap'); break;
                         case 'KeyS': recordTime('tempo'); break;
                         case 'KeyD': recordTime('stroke'); break;
                         case 'KeyX': resetAllTimes(); break;
-                        case 'KeyQ': 
-                            zoom *= 1.2;
+                        case 'KeyQ': zoom *= 1.1; updateTransform(); break;
+                        case 'KeyW': 
+                            zoom = Math.max(1.0, zoom / 1.1);
+                            if (zoom === 1.0) pan = { x: 0, y: 0 };
                             updateTransform();
                             break;
-                        case 'KeyW':
-                            zoom /= 1.2;
-                            updateTransform();
-                            break;
-                        case 'KeyC': controlsOverlay.classList.toggle('hidden'); break;
                         case 'KeyZ':
                             isLineDrawingMode = !isLineDrawingMode;
                             showMessage(isLineDrawingMode ? "ライン描画モード ON" : "ライン描画モード OFF", false);
@@ -651,8 +647,9 @@
                         case 'KeyE':
                             tablesColumn.classList.toggle('hidden');
                             break;
-                        case 'ArrowRight': if(event.shiftKey) skipTime(5); break;
-                        case 'ArrowLeft': if(event.shiftKey) skipTime(-5); break;
+                        case 'KeyR':
+                            controlsOverlay.classList.toggle('hidden');
+                            break;
                     }
                 }
             }
