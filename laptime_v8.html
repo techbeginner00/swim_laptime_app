@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="robots" content="noindex">
+    <title>水泳ラップタイム計測アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            overscroll-behavior: none;
+            font-family: 'Inter', sans-serif;
+            color: #E5E7EB; /* Light gray text for better contrast on dark overlay */
+        }
+        .video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 1;
+            overflow: hidden; /* Hide parts of video that go off-screen when zoomed */
+        }
+        #videoPlayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Maintain aspect ratio */
+            transform-origin: center center;
+        }
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            z-index: 10;
+            cursor: crosshair;
+        }
+        
+        /* Overlays */
+        .ui-overlay {
+            position: absolute;
+            z-index: 20;
+            background-color: rgba(17, 24, 39, 0.8); /* Dark semi-transparent background */
+            backdrop-filter: blur(4px);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        #tables-column {
+            top: 1rem;
+            right: 1rem;
+            width: 380px; /* Fixed width */
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        #tables-column.hidden {
+            opacity: 0;
+            transform: translateX(20px);
+            pointer-events: none;
+        }
+
+        #controls-overlay {
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 95%;
+            max-width: 1000px;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        #controls-overlay.hidden {
+            opacity: 0;
+            transform: translate(-50%, 20px);
+            pointer-events: none;
+        }
+
+        /* Buttons and Controls */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 0.5rem;
+        }
+        .button-primary, .button-secondary, .button-danger, .button-warning {
+            color: white;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .button-primary { background-color: #4F46E5; }
+        .button-primary:hover { background-color: #4338CA; }
+        .button-secondary { background-color: #4B5563; }
+        .button-secondary:hover { background-color: #374151; }
+        .button-danger { background-color: #DC2626; }
+        .button-danger:hover { background-color: #B91C1C; }
+        .button-warning { background-color: #F59E0B; }
+        .button-warning:hover { background-color: #D97706; }
+
+        /* Time Displays and Tables */
+        .time-display { font-size: 1.25rem; font-weight: 600; color: #FFF; }
+        .lap-time-table { width: 100%; margin-top: 0.5rem; border-collapse: collapse; }
+        .lap-time-table th, .lap-time-table td { 
+            border: 1px solid #374151; 
+            padding: 0.3rem 0.5rem; 
+            text-align: left; 
+            font-size: 0.875rem;
+        }
+        .lap-time-table th { background-color: #1F2937; }
+        #strokeCountDisplay { color: #FFF; }
+        h2 { color: #818CF8; } /* Indigo-300 for titles */
+
+        /* File Selector */
+        #file-selector-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            background-color: #1F2937;
+            color: #D1D5DB;
+        }
+    </style>
+</head>
+<body class="bg-black h-full">
+    
+    <div id="file-selector-container" class="text-center p-8 rounded-lg shadow-md w-full max-w-lg">
+        <h1 class="text-3xl font-bold text-indigo-400 mb-2">ラップタイム計測アプリ</h1>
+        <p class="mb-6 text-gray-400">計測したい水泳の動画ファイル（MP4, MOVなど）を選んでください。</p>
+        <input type="file" id="videoFile" accept="video/*" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-600">
+        <p id="messageArea" class="text-sm mt-4 min-h-[20px]"></p>
+        <footer class="mt-6 text-xs text-gray-500">URLを知っている人だけに限定公開中</footer>
+    </div>
+
+    <main id="main-content" style="display: none;">
+        <div class="video-container">
+            <video id="videoPlayer" playsinline></video>
+            <canvas id="overlayCanvas"></canvas>
+        </div>
+
+        <!-- UI Overlays -->
+        <div id="tables-column" class="ui-overlay">
+            <section id="lapTimesSection" class="mb-4">
+                <h2 class="text-lg font-semibold">通過タイム (A)</h2>
+                <table class="lap-time-table">
+                    <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>トータル</th></tr></thead>
+                    <tbody id="lapTimesBody"></tbody>
+                </table>
+            </section>
+            <section id="tempoTimesSection" class="mb-4">
+                <h2 class="text-lg font-semibold">テンポタイム (S)</h2>
+                <table class="lap-time-table">
+                    <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>テンポ</th></tr></thead>
+                    <tbody id="tempoTimesBody"></tbody>
+                </table>
+            </section>
+            <section id="strokeTimesSection">
+                <h2 class="text-lg font-semibold">合計ストローク数 (D)</h2>
+                <p id="strokeCountDisplay" class="text-4xl font-bold mt-1">0</p>
+            </section>
+        </div>
+
+        <div id="controls-overlay" class="ui-overlay">
+            <div class="flex items-center justify-between gap-4 mb-3">
+                <div class="flex-1">
+                    <p class="text-xs text-gray-400" id="instructionText">動画を再生し、タイムを記録してください。</p>
+                    <p class="time-display" id="currentTimeDisplay">0.000 s</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <p class="text-sm font-medium" id="fpsDisplay">FPS: --</p>
+                    <input type="number" id="fpsInput" class="w-24 p-1 border rounded-md text-sm bg-gray-700 border-gray-600 text-white" placeholder="FPS">
+                    <button type="button" id="applyFpsBtn" class="button-secondary text-xs py-1 px-2">適用</button>
+                </div>
+            </div>
+
+            <div class="controls-grid mb-2">
+                <button type="button" id="playPauseBtn" class="button-primary">再生/一時停止 (Space)</button>
+                <button type="button" id="prevFrameBtn" class="button-secondary">コマ戻る (←)</button>
+                <button type="button" id="nextFrameBtn" class="button-secondary">コマ進む (→)</button>
+                <button type="button" id="recordLapBtn" class="button-primary">通過 (A)</button>
+                <button type="button" id="recordTempoBtn" class="button-primary">テンポ (S)</button>
+                <button type="button" id="recordStrokeBtn" class="button-primary">ストローク (D)</button>
+            </div>
+            
+            <div class="controls-grid">
+                <button type="button" id="resetLinesBtn" class="button-warning">ラインリセット</button>
+                <button type="button" id="resetAllTimesBtn" class="button-warning">全タイムリセット(X)</button>
+                <button type="button" id="resetAllBtn" class="button-danger">動画選択に戻る</button>
+            </div>
+             <p id="shortcuts-info" class="text-xs text-gray-500 mt-2 text-center">
+                (5秒スキップ:Shift+←,→) (拡大/縮小:Q/W, ドラッグ移動) (ライン描画:Z, 点削除:Backspace) (表:E) (タイム最新削除:Shift+A/S/D) (操作パネル表示:R)
+            </p>
+        </div>
+    </main>
+
+    <script>
+        // DOM Elements
+        const fileSelectorContainer = document.getElementById('file-selector-container');
+        const videoFile = document.getElementById('videoFile');
+        const mainContent = document.getElementById('main-content');
+        const tablesColumn = document.getElementById('tables-column');
+        const controlsOverlay = document.getElementById('controls-overlay');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const ctx = overlayCanvas.getContext('2d');
+        const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+        const fpsDisplay = document.getElementById('fpsDisplay');
+        const fpsInput = document.getElementById('fpsInput');
+        const applyFpsBtn = document.getElementById('applyFpsBtn');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const prevFrameBtn = document.getElementById('prevFrameBtn');
+        const nextFrameBtn = document.getElementById('nextFrameBtn');
+        const recordLapBtn = document.getElementById('recordLapBtn');
+        const recordTempoBtn = document.getElementById('recordTempoBtn');
+        const recordStrokeBtn = document.getElementById('recordStrokeBtn');
+        const resetLinesBtn = document.getElementById('resetLinesBtn');
+        const resetAllTimesBtn = document.getElementById('resetAllTimesBtn');
+        const resetAllBtn = document.getElementById('resetAllBtn');
+        const lapTimesBody = document.getElementById('lapTimesBody');
+        const tempoTimesBody = document.getElementById('tempoTimesBody');
+        const strokeCountDisplay = document.getElementById('strokeCountDisplay');
+        const instructionText = document.getElementById('instructionText');
+        const messageArea = document.getElementById('messageArea');
+        const shortcutsInfo = document.getElementById('shortcuts-info');
+
+        // State
+        let videoFPS = 30;
+        let collectedPoints = [];
+        let videoLoaded = false;
+        let isLineDrawingMode = false;
+        let timeRecords = {};
+        let keysPressed = {};
+        let frameIntervalId = null;
+        const FRAME_INTERVAL_MS = 100;
+        let zoom = 1.0;
+        let pan = { x: 0, y: 0 };
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+
+        function initialize() {
+            timeRecords = {
+                'lap': { data: [], el: lapTimesBody, render: renderLapTimesTable, name: '通過タイム' },
+                'tempo': { data: [], el: tempoTimesBody, render: renderTempoTimesTable, name: 'テンポタイム' },
+                'stroke': { data: [], render: renderStrokeCount, name: 'ストローク数' }
+            };
+
+            videoFile.addEventListener('change', handleFileSelect);
+            videoPlayer.addEventListener('loadedmetadata', handleVideoMetadata);
+            videoPlayer.addEventListener('timeupdate', updateCurrentTimeDisplay);
+            videoPlayer.addEventListener('play', () => { playPauseBtn.textContent = '一時停止 (Space)'; });
+            videoPlayer.addEventListener('pause', () => { playPauseBtn.textContent = '再生 (Space)'; });
+            videoPlayer.addEventListener('error', (e) => showMessage("動画の読み込みまたは再生中にエラーが発生しました。", true));
+            
+            overlayCanvas.addEventListener('mousedown', handlePanStart);
+            overlayCanvas.addEventListener('mousemove', handlePanMove);
+            overlayCanvas.addEventListener('mouseup', handlePanEnd);
+            overlayCanvas.addEventListener('mouseleave', handlePanEnd);
+            overlayCanvas.addEventListener('click', handleCanvasClick);
+            
+            playPauseBtn.addEventListener('click', togglePlayPause);
+            prevFrameBtn.addEventListener('click', () => stepFrame(-1));
+            nextFrameBtn.addEventListener('click', () => stepFrame(1));
+            
+            recordLapBtn.addEventListener('click', () => recordTime('lap'));
+            recordTempoBtn.addEventListener('click', () => recordTime('tempo'));
+            recordStrokeBtn.addEventListener('click', () => recordTime('stroke'));
+
+            resetLinesBtn.addEventListener('click', resetLinesOnly);
+            resetAllTimesBtn.addEventListener('click', resetAllTimes);
+            resetAllBtn.addEventListener('click', resetAll);
+
+            applyFpsBtn.addEventListener('click', applyManualFPS);
+
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener('resize', handleResize);
+        }
+
+        function showMessage(message, isError = false) {
+            messageArea.textContent = message;
+            messageArea.className = `text-sm mt-4 min-h-[20px] ${isError ? 'text-red-400' : 'text-green-400'}`;
+            setTimeout(() => { if (messageArea.textContent === message) messageArea.textContent = ''; }, 3000);
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file || !file.type.startsWith('video/')) {
+                showMessage('有効な動画ファイルを選択してください。', true);
+                return;
+            }
+            const fileURL = URL.createObjectURL(file);
+            fullResetStatesAndUI();
+            videoPlayer.src = fileURL;
+            videoPlayer.load();
+            fileSelectorContainer.style.display = 'none';
+            mainContent.style.display = 'block';
+            videoLoaded = true;
+            showMessage('動画をロード中...', false);
+        }
+
+        function handleVideoMetadata() {
+            handleResize(); // Set initial canvas size
+            videoFPS = 30;
+            showMessage(`動画読み込み完了。必要に応じてFPSを設定してください。`, false);
+            fpsDisplay.textContent = `FPS: ${videoFPS} (def)`;
+            fpsInput.placeholder = videoFPS;
+            updateCurrentTimeDisplay();
+        }
+        
+        function handleResize() {
+            if (!videoLoaded) return;
+            drawLines();
+        }
+
+        function applyManualFPS() {
+            const newFPS = parseFloat(fpsInput.value);
+            if (!isNaN(newFPS) && newFPS > 0) {
+                videoFPS = newFPS;
+                fpsDisplay.textContent = `FPS: ${videoFPS.toFixed(1)}`;
+                showMessage(`FPSが ${videoFPS.toFixed(1)} に更新されました。`, false);
+                fpsInput.value = '';
+                fpsInput.placeholder = videoFPS.toFixed(1);
+            } else {
+                showMessage('無効なFPSの値です。正の数値を入力してください。', true);
+                fpsInput.value = '';
+            }
+        }
+
+        function updateCurrentTimeDisplay() {
+            if (videoLoaded) {
+                currentTimeDisplay.textContent = `${videoPlayer.currentTime.toFixed(3)} s`;
+            }
+        }
+
+        function togglePlayPause() {
+            if (!videoLoaded) return;
+            videoPlayer.paused || videoPlayer.ended ? videoPlayer.play() : videoPlayer.pause();
+        }
+
+        function stepFrame(direction) {
+            if (!videoLoaded) return;
+            if (!videoPlayer.paused) videoPlayer.pause();
+            const newTime = videoPlayer.currentTime + (direction * (1 / videoFPS));
+            videoPlayer.currentTime = Math.max(0, Math.min(newTime, videoPlayer.duration));
+        }
+
+        function skipTime(seconds) {
+            if (!videoLoaded) return;
+            videoPlayer.currentTime = Math.max(0, Math.min(videoPlayer.currentTime + seconds, videoPlayer.duration));
+        }
+        
+        function updateInstructionTextForLines() {
+            if (isLineDrawingMode) {
+                const lineCount = Math.floor(collectedPoints.length / 2);
+                instructionText.textContent = `線描画: ${collectedPoints.length}点 (線: ${lineCount}本)`;
+            } else {
+                 instructionText.textContent = "タイム記録中...";
+            }
+        }
+
+        function getCanvasCoordinates(event) {
+            const container = document.querySelector('.video-container');
+            if (!container) return { x: 0, y: 0 };
+            const containerRect = container.getBoundingClientRect();
+
+            // 1. Click position relative to the container's top-left corner.
+            const clickX = event.clientX - containerRect.left;
+            const clickY = event.clientY - containerRect.top;
+
+            // 2. Reverse the pan and zoom transformations.
+            // The origin is the center of the container.
+            const centerX = containerRect.width / 2;
+            const centerY = containerRect.height / 2;
+            const unTransformedX = (clickX - centerX - pan.x) / zoom + centerX;
+            const unTransformedY = (clickY - centerY - pan.y) / zoom + centerY;
+
+            // 3. Determine the 'contain' scale and offsets within the container.
+            const videoRatio = videoPlayer.videoWidth / videoPlayer.videoHeight;
+            const containerRatio = containerRect.width / containerRect.height;
+            let videoDisplayWidth, videoDisplayHeight, offsetX, offsetY;
+
+            if (containerRatio > videoRatio) { // Letterboxed top/bottom
+                videoDisplayHeight = containerRect.height;
+                videoDisplayWidth = videoDisplayHeight * videoRatio;
+                offsetX = (containerRect.width - videoDisplayWidth) / 2;
+                offsetY = 0;
+            } else { // Letterboxed left/right
+                videoDisplayWidth = containerRect.width;
+                videoDisplayHeight = videoDisplayWidth / videoRatio;
+                offsetX = 0;
+                offsetY = (containerRect.height - videoDisplayHeight) / 2;
+            }
+
+            // 4. Calculate click position relative to the actual 'contained' video area.
+            const clickRelativeToVideoX = unTransformedX - offsetX;
+            const clickRelativeToVideoY = unTransformedY - offsetY;
+
+            // 5. Convert to original video resolution coordinates.
+            const scaleFactor = videoPlayer.videoWidth / videoDisplayWidth;
+            const finalX = clickRelativeToVideoX * scaleFactor;
+            const finalY = clickRelativeToVideoY * scaleFactor;
+
+            return { x: finalX, y: finalY };
+        }
+
+        function handleCanvasClick(event) {
+            if (isPanning || !videoLoaded || !isLineDrawingMode) return;
+            
+            const coords = getCanvasCoordinates(event);
+
+            if (coords.x < 0 || coords.y < 0 || coords.x > videoPlayer.videoWidth || coords.y > videoPlayer.videoHeight) {
+                return; // Click was outside the video frame
+            }
+
+            collectedPoints.push(coords);
+            drawLines();
+            updateInstructionTextForLines();
+        }
+        
+        function drawLines() {
+            overlayCanvas.width = videoPlayer.videoWidth;
+            overlayCanvas.height = videoPlayer.videoHeight;
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            if (collectedPoints.length === 0) return;
+
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+            const pointRadius = Math.max(5, overlayCanvas.width / 200);
+            collectedPoints.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, pointRadius, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+
+            if (isLineDrawingMode && collectedPoints.length >= 2) {
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+                ctx.lineWidth = Math.max(0.5, overlayCanvas.width / 2000);
+                for (let i = 0; i < collectedPoints.length; i += 2) {
+                    if (collectedPoints[i+1]) {
+                        const p0 = collectedPoints[i];
+                        const p1 = collectedPoints[i+1];
+                        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function recordTime(type) {
+            if (!videoLoaded || !timeRecords[type]) return;
+            const record = timeRecords[type];
+            record.data.push(videoPlayer.currentTime);
+            record.render();
+        }
+
+        function deleteLastTime(type) {
+            if (!videoLoaded || !timeRecords[type]) return;
+            const record = timeRecords[type];
+            if (record.data.length > 0) {
+                record.data.pop();
+                record.render();
+                showMessage(`最新の${record.name}を削除しました`, false);
+            }
+        }
+
+        function deleteLastPoint() {
+            if (isLineDrawingMode && collectedPoints.length > 0) {
+                collectedPoints.pop();
+                drawLines();
+                updateInstructionTextForLines();
+                showMessage("直近の点を削除しました", false);
+            }
+        }
+
+        function renderLapTimesTable() {
+            const { el, data } = timeRecords.lap;
+            el.innerHTML = data.map((time, i) => {
+                const lap = (i > 0) ? (time - data[i-1]) : 0;
+                const total = (i > 0) ? (time - data[0]) : 0;
+                return `<tr>
+                    <td>${i + 1}</td>
+                    <td>${time.toFixed(3)}</td>
+                    <td>${i > 0 ? lap.toFixed(3) : '-'}</td>
+                    <td>${i > 0 ? total.toFixed(3) : '-'}</td >
+                </tr>`;
+            }).join('');
+        }
+
+        function renderTempoTimesTable() {
+            const { el, data } = timeRecords.tempo;
+            el.innerHTML = data.map((time, i) => {
+                const lap = (i > 0) ? (time - data[i-1]) : 0;
+                const calcValue = (i > 0) ? (lap / 3).toFixed(3) : '-';
+                return `<tr>
+                    <td>${i + 1}</td>
+                    <td>${time.toFixed(3)}</td>
+                    <td>${i > 0 ? lap.toFixed(3) : '-'}</td >
+                    <td>${calcValue}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderStrokeCount() {
+            strokeCountDisplay.textContent = timeRecords.stroke.data.length;
+        }
+        
+        function resetLinesOnly() {
+            collectedPoints = [];
+            if (videoLoaded) drawLines();
+            updateInstructionTextForLines();
+        }
+
+        function resetAllTimes() {
+            if (Object.keys(timeRecords).length === 0) return;
+            for (const type in timeRecords) {
+                timeRecords[type].data = [];
+                if(timeRecords[type].render) timeRecords[type].render();
+            }
+            showMessage("全てのタイム記録をリセットしました。", false);
+        }
+        
+        function fullResetStatesAndUI() {
+            videoPlayer.pause();
+            if (videoPlayer.src && videoPlayer.src.startsWith('blob:')) URL.revokeObjectURL(videoPlayer.src);
+            videoPlayer.removeAttribute('src');
+            videoPlayer.currentTime = 0;
+            playPauseBtn.textContent = '再生 (Space)';
+            videoLoaded = false;
+            isLineDrawingMode = false;
+            resetLinesOnly(); 
+            resetAllTimes();
+            zoom = 1.0;
+            pan = { x: 0, y: 0 };
+            updateTransform();
+            instructionText.textContent = "動画を再生し、タイムを記録してください。";
+            fpsDisplay.textContent = "FPS: --";
+            fpsInput.value = '';
+        }
+
+        function resetAll() {
+            fullResetStatesAndUI();
+            videoFile.value = '';
+            mainContent.style.display = 'none';
+            fileSelectorContainer.style.display = 'block';
+            showMessage("全てリセットしました。新しい動画を選択してください。", false);
+        }
+
+        function updateTransform() {
+            const videoRect = videoPlayer.getBoundingClientRect();
+            const panLimitX = Math.max(0, (videoRect.width * zoom - videoRect.width) / 2);
+            const panLimitY = Math.max(0, (videoRect.height * zoom - videoRect.height) / 2);
+
+            pan.x = Math.max(-panLimitX, Math.min(panLimitX, pan.x));
+            pan.y = Math.max(-panLimitY, Math.min(panLimitY, pan.y));
+
+            if (zoom <= 1.01) { // Use a small tolerance
+                zoom = 1.0;
+                pan.x = 0;
+                pan.y = 0;
+            }
+
+            const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+            videoPlayer.style.transform = transform;
+            overlayCanvas.style.transform = transform;
+        }
+
+        function handlePanStart(event) {
+            if (zoom > 1) {
+                event.preventDefault();
+                isPanning = true;
+                panStart.x = event.clientX - pan.x;
+                panStart.y = event.clientY - pan.y;
+                overlayCanvas.style.cursor = 'grabbing';
+            }
+        }
+
+        function handlePanMove(event) {
+            if (isPanning) {
+                event.preventDefault();
+                pan.x = event.clientX - panStart.x;
+                pan.y = event.clientY - panStart.y;
+                updateTransform();
+            }
+        }
+
+        function handlePanEnd(event) {
+            if (isPanning) {
+                isPanning = false;
+                overlayCanvas.style.cursor = 'crosshair';
+            }
+        }
+
+        function handleKeyDown(event) {
+            if (event.target.tagName === 'INPUT' || !videoLoaded) return;
+            
+            const keysToPrevent = ['Space', 'ArrowLeft', 'ArrowRight', 'Enter', 'KeyQ', 'KeyW', 'KeyS', 'KeyD', 'KeyZ', 'KeyE', 'KeyX', 'KeyC', 'Escape', 'Backspace'];
+            if (keysToPrevent.includes(event.code)) {
+                event.preventDefault();
+            }
+
+            keysPressed[event.code] = true;
+
+            if (frameIntervalId === null) { 
+                if (event.code === 'ArrowRight' && !event.shiftKey) {
+                    stepFrame(1);
+                    frameIntervalId = setInterval(() => stepFrame(1), FRAME_INTERVAL_MS);
+                } else if (event.code === 'ArrowLeft' && !event.shiftKey) {
+                    stepFrame(-1);
+                    frameIntervalId = setInterval(() => stepFrame(-1), FRAME_INTERVAL_MS);
+                }
+            }
+        }
+
+        function handleKeyUp(event) {
+            const releasedKey = event.code;
+            
+            if (videoLoaded && !event.repeat) {
+                const shiftIsPressed = keysPressed['ShiftLeft'] || keysPressed['ShiftRight'];
+
+                if (shiftIsPressed) {
+                    switch(releasedKey) {
+                        case 'KeyA': deleteLastTime('lap'); break;
+                        case 'KeyS': deleteLastTime('tempo'); break;
+                        case 'KeyD': deleteLastTime('stroke'); break;
+                        case 'ArrowRight': skipTime(5); break;
+                        case 'ArrowLeft': skipTime(-5); break;
+                    }
+                } 
+                else {
+                    switch(releasedKey) {
+                        case 'Space': togglePlayPause(); break;
+                        case 'KeyA': recordTime('lap'); break;
+                        case 'KeyS': recordTime('tempo'); break;
+                        case 'KeyD': recordTime('stroke'); break;
+                        case 'KeyX': resetAllTimes(); break;
+                        case 'KeyQ': zoom *= 1.1; updateTransform(); break;
+                        case 'KeyW': 
+                            zoom = Math.max(1.0, zoom / 1.1);
+                            if (zoom === 1.0) pan = { x: 0, y: 0 };
+                            updateTransform();
+                            break;
+                        case 'KeyZ':
+                            isLineDrawingMode = !isLineDrawingMode;
+                            showMessage(isLineDrawingMode ? "ライン描画モード ON" : "ライン描画モード OFF", false);
+                            if (!isLineDrawingMode) resetLinesOnly();
+                            updateInstructionTextForLines();
+                            break;
+                        case 'KeyE':
+                            tablesColumn.classList.toggle('hidden');
+                            break;
+                        case 'KeyR':
+                            controlsOverlay.classList.toggle('hidden');
+                            break;
+                        case 'Backspace':
+                            deleteLastPoint();
+                            break;
+                    }
+                }
+            }
+
+            if (releasedKey === 'ArrowRight' || releasedKey === 'ArrowLeft') {
+                if (frameIntervalId !== null) {
+                    clearInterval(frameIntervalId);
+                    frameIntervalId = null;
+                }
+            }
+            delete keysPressed[releasedKey];
+        }
+
+        initialize();
+    </script>
+</body>
+</html>
