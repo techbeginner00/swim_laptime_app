@@ -247,6 +247,7 @@
         let pan = { x: 0, y: 0 };
         let isPanning = false;
         let panStart = { x: 0, y: 0 };
+        let didPan = false; // ドラッグ操作を検知するフラグ
 
         function initialize() {
             timeRecords = {
@@ -415,6 +416,12 @@
         }
 
         function handleCanvasClick(event) {
+            // ドラッグ操作後のクリックは無視する
+            if (didPan) {
+                didPan = false;
+                return;
+            }
+
             if (isPanning || !videoLoaded || !isLineDrawingMode) return;
             
             const coords = getCanvasCoordinates(event);
@@ -578,6 +585,7 @@
             if (zoom > 1) {
                 event.preventDefault();
                 isPanning = true;
+                didPan = false; // 新しい操作の開始時にリセット
                 panStart.x = event.clientX - pan.x;
                 panStart.y = event.clientY - pan.y;
                 overlayCanvas.style.cursor = 'grabbing';
@@ -587,6 +595,7 @@
         function handlePanMove(event) {
             if (isPanning) {
                 event.preventDefault();
+                didPan = true; // ドラッグ操作が行われたことを記録
                 pan.x = event.clientX - panStart.x;
                 pan.y = event.clientY - panStart.y;
                 updateTransform();
