@@ -82,6 +82,9 @@ function initialize() {
     dom.overlayCanvas = document.getElementById('overlayCanvas');
     dom.ctx = dom.overlayCanvas.getContext('2d');
     dom.currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    dom.speedBtn1x = document.getElementById('speedBtn1x');
+    dom.speedBtn15x = document.getElementById('speedBtn15x');
+    dom.speedBtn2x = document.getElementById('speedBtn2x');
     dom.fpsDisplay = document.getElementById('fpsDisplay');
     dom.fpsInput = document.getElementById('fpsInput');
     dom.applyFpsBtn = document.getElementById('applyFpsBtn');
@@ -93,6 +96,7 @@ function initialize() {
     dom.recordStrokeBtn = document.getElementById('recordStrokeBtn');
     dom.resetLinesBtn = document.getElementById('resetLinesBtn');
     dom.resetAllTimesBtn = document.getElementById('resetAllTimesBtn');
+    dom.restartBtn = document.getElementById('restartBtn');
     dom.resetAllBtn = document.getElementById('resetAllBtn');
     dom.lapTimesBody = document.getElementById('lapTimesBody');
     dom.tempoTimesBody = document.getElementById('tempoTimesBody');
@@ -120,6 +124,10 @@ function initialize() {
     dom.videoPlayer.addEventListener('timeupdate', updateCurrentTimeDisplay);
     dom.videoPlayer.addEventListener('play', () => { dom.playPauseBtn.textContent = '一時停止 (Space)'; });
     dom.videoPlayer.addEventListener('pause', () => { dom.playPauseBtn.textContent = '再生 (Space)'; });
+
+    dom.speedBtn1x.addEventListener('click', () => setPlaybackSpeed(1.0));
+    dom.speedBtn15x.addEventListener('click', () => setPlaybackSpeed(1.5));
+    dom.speedBtn2x.addEventListener('click', () => setPlaybackSpeed(2.0));
     
     dom.overlayCanvas.addEventListener('mousedown', handlePanStart);
     dom.overlayCanvas.addEventListener('mousemove', handlePanMove);
@@ -137,6 +145,7 @@ function initialize() {
 
     dom.resetLinesBtn.addEventListener('click', resetLinesOnly);
     dom.resetAllTimesBtn.addEventListener('click', resetAllTimes);
+    dom.restartBtn.addEventListener('click', restartVideo);
     dom.resetAllBtn.addEventListener('click', resetAll);
 
     dom.applyFpsBtn.addEventListener('click', applyManualFPS);
@@ -210,6 +219,7 @@ function handleFileSelect(event) {
 
 function handleVideoMetadata() {
     handleResize(); // Set initial canvas size
+    setPlaybackSpeed(1.0);
     state.videoFPS = DEFAULTS.VIDEO_FPS;
     dom.fpsDisplay.textContent = `FPS: ${state.videoFPS} (def)`;
     dom.fpsInput.placeholder = state.videoFPS;
@@ -253,6 +263,37 @@ function stepFrame(direction) {
 function skipTime(seconds) {
     if (!state.videoLoaded) return;
     dom.videoPlayer.currentTime = Math.max(0, Math.min(dom.videoPlayer.currentTime + seconds, dom.videoPlayer.duration));
+}
+
+/*
+// 比較用：最初から再生する（ユーザーの指示によりコメントアウト）
+function restartAndPlayVideo_original() {
+    if (!state.videoLoaded) return;
+    dom.videoPlayer.currentTime = 0;
+    dom.videoPlayer.play();
+}
+*/
+
+// 先頭に戻って一時停止する
+function restartVideo() {
+    if (!state.videoLoaded) return;
+    dom.videoPlayer.pause();
+    dom.videoPlayer.currentTime = 0;
+}
+
+function setPlaybackSpeed(rate) {
+    // Update active button UI first, this can be done anytime.
+    [dom.speedBtn1x, dom.speedBtn15x, dom.speedBtn2x].forEach(btn => {
+        btn.classList.remove('active-speed');
+    });
+
+    if (rate === 1.0) dom.speedBtn1x.classList.add('active-speed');
+    else if (rate === 1.5) dom.speedBtn15x.classList.add('active-speed');
+    else if (rate === 2.0) dom.speedBtn2x.classList.add('active-speed');
+
+    // Only set playback rate if video is loaded
+    if (!state.videoLoaded) return;
+    dom.videoPlayer.playbackRate = rate;
 }
 
 
@@ -499,6 +540,8 @@ function fullResetStatesAndUI() {
     state.pan = { x: 0, y: 0 };
     updateTransform();
 
+    setPlaybackSpeed(1.0);
+
     state.drawing.lineColor = DEFAULTS.LINE_COLOR;
     state.drawing.pointColor = DEFAULTS.POINT_COLOR;
     state.drawing.lineWidth = DEFAULTS.LINE_WIDTH;
@@ -563,6 +606,7 @@ function handleKeyUp(event) {
                 case KEY_CODES.KEY_D: deleteLastTime(RECORD_TYPES.STROKE); break;
                 case KEY_CODES.ARROW_RIGHT: skipTime(DEFAULTS.SKIP_TIME_SECONDS); break;
                 case KEY_CODES.ARROW_LEFT: skipTime(-DEFAULTS.SKIP_TIME_SECONDS); break;
+                case KEY_CODES.KEY_R: restartVideo(); break;
                 case KEY_CODES.KEY_X: resetAllTimes(); break;
                 case KEY_CODES.KEY_Z: 
                     resetLinesOnly(); 
