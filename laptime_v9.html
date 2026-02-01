@@ -29,6 +29,11 @@
         <!-- UI Overlays -->
         <div id="top-display-overlay" class="ui-overlay">
             <p class="time-display" id="currentTimeDisplay">0.000 s</p>
+            <div id="speed-controls" class="flex items-center gap-1 ml-2">
+                <button type="button" id="speedBtn1x" class="speed-btn">1x</button>
+                <button type="button" id="speedBtn15x" class="speed-btn">1.5x</button>
+                <button type="button" id="speedBtn2x" class="speed-btn">2x</button>
+            </div>
         </div>
 
         <div id="tables-column" class="ui-overlay">
@@ -68,6 +73,7 @@
                 <button type="button" id="playPauseBtn" class="button-primary">再生/一時停止 (Space)</button>
                 <button type="button" id="prevFrameBtn" class="button-secondary">コマ戻る (←)</button>
                 <button type="button" id="nextFrameBtn" class="button-secondary">コマ進む (→)</button>
+                <button type="button" id="restartBtn" class="button-secondary">先頭に戻る (Shift+R)</button>
                 <button type="button" id="recordLapBtn" class="button-primary">通過 (A)</button>
                 <button type="button" id="recordTempoBtn" class="button-primary">テンポ (S)</button>
                 <button type="button" id="recordStrokeBtn" class="button-primary">ストローク (D)</button>
@@ -112,6 +118,7 @@
                 テンポタイム記録：S<br>
                 ストローク数を+1：D<br>
                 <br>
+                先頭に戻る：Shift+R<br>
                 全記録リセット：Shift+X<br>
                 通過タイム削除：Shift+A<br>
                 テンポタイム削除：Shift+S<br>
