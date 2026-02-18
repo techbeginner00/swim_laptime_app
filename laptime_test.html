@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="robots" content="noindex">
+    <title>水泳ラップタイム計測アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="laptime_test.css">
+</head>
+<body class="bg-black h-full">
+    
+    <div id="file-selector-container" class="text-center p-8 rounded-lg shadow-md w-full max-w-lg">
+        <h1 class="text-3xl font-bold text-indigo-400 mb-2">ラップタイム計測アプリ</h1>
+        <p class="mb-6 text-gray-400">計測したい動画ファイル（MP4, MOVなど）を選択してください。</p>
+        <input type="file" id="videoFile" accept="video/*" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-600">
+        <p id="messageArea" class="text-sm mt-4 min-h-[20px]"></p>
+        <p>お問い合わせ・ご要望：zerolog.dev@gmail.com</p>
+        <footer class="mt-6 text-xs text-gray-500">URLを知っている人だけに限定公開中</footer>
+    </div>
+
+    <main id="main-content" style="display: none;">
+        <div class="video-container">
+            <video id="videoPlayer" playsinline></video>
+            <canvas id="overlayCanvas"></canvas>
+        </div>
+
+        <!-- UI Overlays -->
+        <div id="top-display-overlay" class="ui-overlay">
+            <p class="time-display" id="currentTimeDisplay">0.000 s</p>
+            <div id="speed-controls" class="flex items-center gap-1 ml-2">
+                <button type="button" id="speedBtn1x" class="speed-btn">1x</button>
+                <button type="button" id="speedBtn15x" class="speed-btn">1.5x</button>
+                <button type="button" id="speedBtn2x" class="speed-btn">2x</button>
+            </div>
+        </div>
+
+        <div id="tables-column" class="ui-overlay">
+            <section id="lapTimesSection" class="mb-4">
+                <h2 class="text-lg font-semibold">通過タイム (A)</h2>
+                <table class="lap-time-table">
+                    <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>トータル</th></tr></thead>
+                    <tbody id="lapTimesBody"></tbody>
+                </table>
+            </section>
+            <section id="tempoTimesSection" class="mb-4">
+                <h2 class="text-lg font-semibold">テンポタイム (S)</h2>
+                <table class="lap-time-table">
+                    <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>テンポ</th></tr></thead>
+                    <tbody id="tempoTimesBody"></tbody>
+                </table>
+            </section>
+            <section id="strokeTimesSection">
+                <h2 class="text-lg font-semibold">合計ストローク数 (D)</h2>
+                <p id="strokeCountDisplay" class="text-4xl font-bold mt-1">0</p>
+            </section>
+        </div>
+
+        <div id="controls-overlay" class="ui-overlay">
+            <div class="flex items-center justify-between gap-4 mb-3">
+                <div class="flex-1">
+                    <p id="fileNameDisplay" class="text-sm text-gray-400 truncate"></p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <p class="text-sm font-medium" id="fpsDisplay">FPS: --</p>
+                    <input type="number" id="fpsInput" class="w-24 p-1 border rounded-md text-sm bg-gray-700 border-gray-600 text-white" placeholder="FPS">
+                    <button type="button" id="applyFpsBtn" class="button-secondary text-xs py-1 px-2">適用</button>
+                </div>
+            </div>
+
+            <div class="controls-grid mb-2">
+                <button type="button" id="playPauseBtn" class="button-primary">再生/一時停止 (Space)</button>
+                <button type="button" id="prevFrameBtn" class="button-secondary">コマ戻る (←)</button>
+                <button type="button" id="nextFrameBtn" class="button-secondary">コマ進む (→)</button>
+                <button type="button" id="restartBtn" class="button-secondary">先頭に戻る (Shift+R)</button>
+                <button type="button" id="recordLapBtn" class="button-primary">通過 (A)</button>
+                <button type="button" id="recordTempoBtn" class="button-primary">テンポ (S)</button>
+                <button type="button" id="recordStrokeBtn" class="button-primary">ストローク (D)</button>
+            </div>
+            
+            <div class="controls-grid">
+                <button type="button" id="resetLinesBtn" class="button-warning">ラインリセット</button>
+                <button type="button" id="resetAllTimesBtn" class="button-warning">全タイムリセット(Shift+X)</button>
+                <button type="button" id="resetAllBtn" class="button-danger">動画選択に戻る</button>
+            </div>
+            <div class="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-gray-700">
+                <label for="lineColorPicker" class="text-sm text-gray-300">線の色:</label>
+                <input type="color" id="lineColorPicker" value="#FFFF00" class="w-8 h-8 p-0 border-0 rounded bg-transparent">
+                
+                <label for="pointColorPicker" class="text-sm text-gray-300">点の色:</label>
+                <input type="color" id="pointColorPicker" value="#FF0000" class="w-8 h-8 p-0 border-0 rounded bg-transparent">
+
+                <label for="lineWidthSlider" class="text-sm text-gray-300">線の太さ:</label>
+                <input type="range" id="lineWidthSlider" min="0.5" max="10" step="0.5" value="2" class="w-32">
+                <span id="lineWidthValue" class="text-sm w-12 text-center">2.0px</span>
+            </div>
+        </div>
+
+        <!-- ================================================================= -->
+        <!-- Mobile Controls - Hidden by default, shown via CSS media query  -->
+        <!-- ================================================================= -->
+        <div id="mobile-controls-overlay" class="ui-overlay" style="display: none;">
+            <div class="m-action-zone">
+                <div class="m-main-actions">
+                    <button type="button" id="m-prevFrameBtn" class="m-btn">コマ戻る</button>
+                    <button type="button" id="m-playPauseBtn" class="m-btn m-btn-primary">再生</button>
+                    <button type="button" id="m-nextFrameBtn" class="m-btn">コマ進む</button>
+                </div>
+                <div class="m-record-actions">
+                    <button type="button" id="m-recordLapBtn" class="m-btn">通過 (A)</button>
+                    <button type="button" id="m-recordTempoBtn" class="m-btn">テンポ (S)</button>
+                    <button type="button" id="m-recordStrokeBtn" class="m-btn">ストローク (D)</button>
+                </div>
+            </div>
+            <div class="m-utility-zone">
+                <div class="m-utility-tabs">
+                    <button type="button" id="m-speedTabBtn" class="m-tab-btn active">速度</button>
+                    <button type="button" id="m-settingsTabBtn" class="m-tab-btn">設定</button>
+                    <button type="button" id="m-resetTabBtn" class="m-tab-btn">リセット</button>
+                </div>
+                <div id="m-utility-panels">
+                    <div id="m-speed-panel" class="m-panel active">
+                        <button type="button" id="m-speedBtn1x" class="m-btn">1x</button>
+                        <button type="button" id="m-speedBtn15x" class="m-btn">1.5x</button>
+                        <button type="button" id="m-speedBtn2x" class="m-btn">2x</button>
+                    </div>
+                    <div id="m-settings-panel" class="m-panel">
+                        <div class="m-setting-item">
+                            <label for="m-fpsInput">FPS:</label>
+                            <input type="number" id="m-fpsInput" class="m-input">
+                            <button type="button" id="m-applyFpsBtn" class="m-btn">適用</button>
+                        </div>
+                        <div class="m-setting-item">
+                            <label>線:</label> <input type="color" id="m-lineColorPicker">
+                            <label>点:</label> <input type="color" id="m-pointColorPicker">
+                        </div>
+                         <div class="m-setting-item">
+                            <label>太さ:</label> <input type="range" id="m-lineWidthSlider" min="0.5" max="10" step="0.5">
+                        </div>
+                    </div>
+                    <div id="m-reset-panel" class="m-panel">
+                        <button type="button" id="m-restartBtn" class="m-btn">先頭に戻る</button>
+                        <button type="button" id="m-resetLinesBtn" class="m-btn">ラインリセット</button>
+                        <button type="button" id="m-resetAllTimesBtn" class="m-btn m-btn-warning">全タイムリセット</button>
+                        <button type="button" id="m-resetAllBtn" class="m-btn m-btn-danger">動画選択に戻る</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="shortcuts-overlay" class="ui-overlay">
+            <p class="text-xs text-gray-500 shortcut-details">
+                再生・一時停止：space<br>
+                コマ戻し：←<br>
+                コマ送り：→<br>
+                5秒戻し：Shift + ←<br>
+                5秒スキップ：Shift + →<br>
+                拡大：Q<br>
+                縮小：W<br>
+                移動：ドラッグ<br>
+                <br>
+                点描画：クリック<br>
+                *2点で線を引きます。<br>
+                無限に打てます。<br>
+                点を一つ削除：Backspace<br>
+                点をリセット：Shift+Z<br>
+                <br>
+                通過タイム記録：A<br>
+                テンポタイム記録：S<br>
+                ストローク数を+1：D<br>
+                <br>
+                先頭に戻る：Shift+R<br>
+                全記録リセット：Shift+X<br>
+                通過タイム削除：Shift+A<br>
+                テンポタイム削除：Shift+S<br>
+                ストローク数を-1：Shift+D<br>
+                <br>
+                計測表の表示/非表示：E<br>
+                操作パネルの表示/非表示：R<br>
+                ショートカット非表示：T<br>
+            </p>
+            <p class="text-xs text-gray-500 shortcut-hint hidden">ショートカット表示：T</p>
+        </div>
+    </main>
+
+    <script src="laptime_test.js" defer></script>
+</body>
+</html>
