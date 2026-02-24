@@ -39,23 +39,28 @@ html, body {
             position: absolute;
             z-index: 20;
             background-color: rgba(17, 24, 39, 0.8); /* Dark semi-transparent background */
-            backdrop-filter: blur(4px);
             border-radius: 0.5rem;
             padding: 0.5rem;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         #top-display-overlay {
+            display: none;
             top: 1rem;
             right: 1rem;
-            display: flex;
             align-items: center;
+            background-color: rgba(17, 24, 39, 0.8);
             /* width: 280px; */
+        }
+
+        body.video-loaded #top-display-overlay {
+            display: flex;
         }
 
         #tables-column {
             top: 6rem;
             right: 1rem;
+            background-color: rgba(17, 24, 39, 0.8);
             /* width: 280px; */ /* Fixed width */
             max-height: calc(100vh - 7rem);
             overflow-y: auto;
@@ -67,9 +72,14 @@ html, body {
             pointer-events: none;
         }
 
+        #mobile-tables-column {
+            display: none;
+        }
+
         #shortcuts-overlay {
             top: 1rem;
             left: 1rem;
+            background-color: rgba(17, 24, 39, 0.8);
             transition: opacity 0.3s, transform 0.3s;
         }
         
@@ -80,6 +90,7 @@ html, body {
             transform: translateX(-50%);
             width: 95%;
             max-width: 800px;
+            background-color: rgba(17, 24, 39, 0.8);
             transition: opacity 0.3s, transform 0.3s;
         }
         #controls-overlay.hidden {
@@ -156,3 +167,203 @@ html, body {
             background-color: #4F46E5; /* Same as button-primary */
             cursor: default;
         }
+
+/* ================================================================== */
+/* Mobile Pro Layout (max-width: 900px and landscape)                */
+/* ================================================================== */
+@media (max-width: 900px) and (orientation: landscape) {
+    /* --- Base Layout --- */
+    #main-content {
+        display: flex !important;
+        flex-direction: column;
+        height: 100vh;
+        width: 100%;
+        overflow: hidden;
+    }
+    .video-container {
+        position: relative;
+        width: 100%;
+        height: 100vh; /* Full height */
+    }
+    #videoPlayer, #overlayCanvas {
+        object-position: center center;
+    }
+
+    /* --- UI Switching --- */
+    #controls-overlay, #shortcuts-overlay, #tables-column {
+        display: none !important;
+    }
+
+    #mobile-tables-column {
+        display: block;
+    }
+    body.video-loaded #mobile-controls-overlay { 
+        display: block !important; 
+    } /* Use block instead of flex */
+
+    /* --- Mobile Controls Root --- */
+    #mobile-controls-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: transparent; /* No background */
+        pointer-events: none; /* Allow clicks to go through to the video */
+    }
+
+    /* --- New Control Buttons --- */
+    .playback-controls, .record-buttons, .panel-tab {
+        pointer-events: auto; /* Re-enable pointer events for buttons */
+        position: absolute;
+        background-color: rgba(23, 23, 23, 0.8);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    }
+
+    .playback-controls {
+        bottom: 15px;
+        left: 15px;
+        padding: 0.25rem;
+    }
+
+    .control-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 0.9rem;
+        margin: 0 0.25rem;
+        padding: 0.25rem;
+        line-height: 1;
+    }
+    
+    .play-pause-btn {
+        background-color: #4F46E5;
+        border-radius: 50%;
+        width: 25px;
+        height: 25px;
+    }
+
+    .frame-controls {
+        display: flex;
+        align-items: center;
+    }
+
+    .record-buttons {
+        bottom: 50px;
+        right: 10px;
+        flex-direction: column;
+        gap: 0.25rem;
+        padding: 0.4rem 0.25rem;
+    }
+
+    .record-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 0.5rem;
+        background-color: rgba(60, 60, 60, 0.9);
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* --- Collapsible Panels & Tabs --- */
+    .panel-tab {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        padding: 0.5rem 0.25rem;
+        font-size: 0.6rem;
+        cursor: pointer;
+        z-index: 99; /* Ensure tabs are always on top */
+    }
+
+    .panel-close-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        color: white;
+        font-size: 0.75rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+
+    .right-tab {
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        border-top-left-radius: 1.5rem;
+        border-bottom-left-radius: 1.5rem;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    .bottom-tab {
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        writing-mode: horizontal-tb;
+        border-top-left-radius: 1.5rem;
+        border-top-right-radius: 1.5rem;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        padding: 0.5rem 1.5rem;
+    }
+
+    .collapsible-panel {
+        position: absolute;
+        background-color: rgba(17, 24, 39, 0.9);
+        transition: transform 0.3s ease-in-out;
+        z-index: 30;
+    }
+
+    #right-panel {
+        top: 0;
+        right: 0;
+        width: 300px;
+        height: 100%;
+        transform: translateX(100%);
+        padding: 1rem;
+        overflow-y: auto;
+    }
+    #right-panel.open {
+        transform: translateX(0);
+    }
+
+    #bottom-panel {
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        transform: translateY(100%);
+        border-top: 1px solid #374151;
+    }
+    #bottom-panel.open {
+        transform: translateY(0);
+    }
+    
+    .panel-content {
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+    }
+
+    .panel-btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.6rem;
+        border: 1px solid white;
+        border-radius: 0.5rem;
+        background-color: #4B5563;
+        color: white;
+    }
+}
+
