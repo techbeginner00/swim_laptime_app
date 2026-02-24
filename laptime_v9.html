@@ -7,7 +7,7 @@
     <title>水泳ラップタイム計測アプリ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="laptime.css">
+    <link rel="stylesheet" href="laptime_test.css">
 </head>
 <body class="bg-black h-full">
     
@@ -97,6 +97,76 @@
             </div>
         </div>
 
+        <!-- ================================================================= -->
+        <!-- Mobile Controls - Redesigned -->
+        <!-- ================================================================= -->
+        <div id="mobile-controls-overlay" class="ui-overlay" style="display: none;">
+            <!-- Center playback controls -->
+            <div class="playback-controls">
+                <button id="m-skip-rewind-btn" class="control-btn">⏪</button>
+                <div class="frame-controls">
+                    <button id="m-prev-frame-btn" class="control-btn">◀</button>
+                    <button id="m-play-pause-btn" class="control-btn play-pause-btn">▶</button>
+                    <button id="m-next-frame-btn" class="control-btn">▶</button>
+                </div>
+                <button id="m-skip-forward-btn" class="control-btn">⏩</button>
+            </div>
+
+            <!-- Record buttons -->
+            <div class="record-buttons">
+                <button id="m-record-lap-btn" class="record-btn">通過</button>
+                <button id="m-record-tempo-btn" class="record-btn">テンポ</button>
+                <button id="m-record-stroke-btn" class="record-btn">ストローク</button>
+            </div>
+
+            <!-- Right-side tab for tables -->
+            <div id="right-panel-tab" class="panel-tab right-tab">表</div>
+
+            <!-- Bottom tab for settings -->
+            <div id="bottom-panel-tab" class="panel-tab bottom-tab">設定</div>
+        </div>
+
+        <!-- Right-side collapsible panel for tables -->
+        <div id="right-panel" class="collapsible-panel">
+            <button id="close-right-panel-btn" class="panel-close-btn">×</button>
+            <div id="mobile-tables-column">
+                <section id="mobile-lapTimesSection" class="mb-4">
+                    <h2 class="text-lg font-semibold">通過タイム (A)</h2>
+                    <table class="lap-time-table">
+                        <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>トータル</th></tr></thead>
+                        <tbody id="mobile-lapTimesBody"></tbody>
+                    </table>
+                </section>
+                <section id="mobile-tempoTimesSection" class="mb-4">
+                    <h2 class="text-lg font-semibold">テンポタイム (S)</h2>
+                    <table class="lap-time-table">
+                        <thead><tr><th>No.</th><th>計測</th><th>ラップ</th><th>テンポ</th></tr></thead>
+                        <tbody id="mobile-tempoTimesBody"></tbody>
+                    </table>
+                </section>
+                <section id="mobile-strokeTimesSection">
+                    <h2 class="text-lg font-semibold">合計ストローク数 (D)</h2>
+                    <p id="mobile-strokeCountDisplay" class="text-4xl font-bold mt-1">0</p>
+                </section>
+            </div>
+        </div>
+
+        <!-- Bottom collapsible panel for settings -->
+        <div id="bottom-panel" class="collapsible-panel">
+            <button id="close-bottom-panel-btn" class="panel-close-btn">×</button>
+            <div class="panel-content">
+                <button id="m-restart-btn" class="panel-btn">先頭から再生</button>
+                <button id="m-choose-video-btn" class="panel-btn">動画を選ぶ</button>
+                <button id="m-reset-lines-btn" class="panel-btn">ラインリセット</button>
+                <button id="m-reset-times-btn" class="panel-btn">タイムリセット</button>
+                <div class="fps-settings">
+                    <input type="number" id="m-fps-input" placeholder="FPS">
+                    <button id="m-apply-fps-btn">適用</button>
+                </div>
+            </div>
+        </div>
+
+
         <div id="shortcuts-overlay" class="ui-overlay">
             <p class="text-xs text-gray-500 shortcut-details">
                 再生・一時停止：space<br>
@@ -132,6 +202,6 @@
         </div>
     </main>
 
-    <script src="laptime.js" defer></script>
+    <script src="laptime_test.js" defer></script>
 </body>
 </html>
