@@ -61,6 +61,8 @@ const state = {
     isPanning: false,
     panStart: { x: 0, y: 0 },
     didPan: false,
+    pinching: false,
+    initialPinchDistance: 0,
     drawing: {
         lineColor: DEFAULTS.LINE_COLOR,
         pointColor: DEFAULTS.POINT_COLOR,
@@ -78,6 +80,7 @@ function initialize() {
     dom.mainContent = document.getElementById('main-content');
     dom.tablesColumn = document.getElementById('tables-column');
     dom.controlsOverlay = document.getElementById('controls-overlay');
+    dom.mobileControlsOverlay = document.getElementById('mobile-controls-overlay'); // Add this
     dom.videoPlayer = document.getElementById('videoPlayer');
     dom.overlayCanvas = document.getElementById('overlayCanvas');
     dom.ctx = dom.overlayCanvas.getContext('2d');
@@ -101,6 +104,9 @@ function initialize() {
     dom.lapTimesBody = document.getElementById('lapTimesBody');
     dom.tempoTimesBody = document.getElementById('tempoTimesBody');
     dom.strokeCountDisplay = document.getElementById('strokeCountDisplay');
+    dom.mobile_lapTimesBody = document.getElementById('mobile-lapTimesBody');
+    dom.mobile_tempoTimesBody = document.getElementById('mobile-tempoTimesBody');
+    dom.mobile_strokeCountDisplay = document.getElementById('mobile-strokeCountDisplay');
     dom.messageArea = document.getElementById('messageArea');
     dom.shortcutsOverlay = document.getElementById('shortcuts-overlay');
     dom.shortcutDetails = dom.shortcutsOverlay.querySelector('.shortcut-details');
@@ -113,17 +119,23 @@ function initialize() {
 
     // Initialize time records
     state.timeRecords = {
-        [RECORD_TYPES.LAP]: { data: [], el: dom.lapTimesBody, render: renderLapTimesTable, name: '通過タイム' },
-        [RECORD_TYPES.TEMPO]: { data: [], el: dom.tempoTimesBody, render: renderTempoTimesTable, name: 'テンポタイム' },
-        [RECORD_TYPES.STROKE]: { data: [], render: renderStrokeCount, name: 'ストローク数' }
+        [RECORD_TYPES.LAP]: { data: [], els: [dom.lapTimesBody, dom.mobile_lapTimesBody], render: renderLapTimesTable, name: '通過タイム' },
+        [RECORD_TYPES.TEMPO]: { data: [], els: [dom.tempoTimesBody, dom.mobile_tempoTimesBody], render: renderTempoTimesTable, name: 'テンポタイム' },
+        [RECORD_TYPES.STROKE]: { data: [], els: [dom.strokeCountDisplay, dom.mobile_strokeCountDisplay], render: renderStrokeCount, name: 'ストローク数' }
     };
 
     // Add event listeners
     dom.videoFile.addEventListener('change', handleFileSelect);
     dom.videoPlayer.addEventListener('loadedmetadata', handleVideoMetadata);
     dom.videoPlayer.addEventListener('timeupdate', updateCurrentTimeDisplay);
-    dom.videoPlayer.addEventListener('play', () => { dom.playPauseBtn.textContent = '一時停止 (Space)'; });
-    dom.videoPlayer.addEventListener('pause', () => { dom.playPauseBtn.textContent = '再生 (Space)'; });
+    dom.videoPlayer.addEventListener('play', () => { 
+        dom.playPauseBtn.textContent = '一時停止 (Space)';
+        if(dom.m_play_pause_btn) dom.m_play_pause_btn.textContent = '||';
+    });
+    dom.videoPlayer.addEventListener('pause', () => { 
+        dom.playPauseBtn.textContent = '再生 (Space)'; 
+        if(dom.m_play_pause_btn) dom.m_play_pause_btn.textContent = '▶';
+    });
 
     dom.speedBtn1x.addEventListener('click', () => setPlaybackSpeed(1.0));
     dom.speedBtn15x.addEventListener('click', () => setPlaybackSpeed(1.5));
@@ -134,6 +146,9 @@ function initialize() {
     dom.overlayCanvas.addEventListener('mouseup', handlePanEnd);
     dom.overlayCanvas.addEventListener('mouseleave', handlePanEnd);
     dom.overlayCanvas.addEventListener('click', handleCanvasClick);
+    dom.overlayCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    dom.overlayCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    dom.overlayCanvas.addEventListener('touchend', handleTouchEnd, { passive: false });
     
     dom.playPauseBtn.addEventListener('click', togglePlayPause);
     dom.prevFrameBtn.addEventListener('click', () => stepFrame(-1));
@@ -152,21 +167,26 @@ function initialize() {
 
     dom.lineColorPicker.addEventListener('input', (e) => {
         state.drawing.lineColor = hexToRgba(e.target.value, 0.8);
+        if(dom.m_lineColorPicker) dom.m_lineColorPicker.value = e.target.value;
         drawLines();
     });
     dom.pointColorPicker.addEventListener('input', (e) => {
         state.drawing.pointColor = hexToRgba(e.target.value, 0.7);
+        if(dom.m_pointColorPicker) dom.m_pointColorPicker.value = e.target.value;
         drawLines();
     });
     dom.lineWidthSlider.addEventListener('input', (e) => {
         state.drawing.lineWidth = parseFloat(e.target.value);
         dom.lineWidthValue.textContent = `${state.drawing.lineWidth.toFixed(1)}px`;
+        if(dom.m_lineWidthSlider) dom.m_lineWidthSlider.value = e.target.value;
         drawLines();
     });
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('resize', handleResize);
+
+    initializeMobileUI();
 }
 
 
@@ -213,6 +233,7 @@ function handleFileSelect(event) {
     dom.fileSelectorContainer.style.display = 'none';
     dom.mainContent.style.display = 'block';
     state.videoLoaded = true;
+    document.body.classList.add('video-loaded'); // Add class to body
     dom.fileNameDisplay.textContent = file.name;
     showMessage('動画をロード中...', false);
 }
@@ -227,15 +248,18 @@ function handleVideoMetadata() {
 }
 
 function applyManualFPS() {
-    const newFPS = parseFloat(dom.fpsInput.value);
+    const newFPSRaw = dom.fpsInput.value || (dom.m_fpsInput && dom.m_fpsInput.value);
+    const newFPS = parseFloat(newFPSRaw);
+
     if (!isNaN(newFPS) && newFPS > 0) {
         state.videoFPS = newFPS;
         dom.fpsDisplay.textContent = `FPS: ${state.videoFPS.toFixed(1)}`;
         dom.fpsInput.value = '';
         dom.fpsInput.placeholder = state.videoFPS.toFixed(1);
+        if(dom.m_fpsInput) dom.m_fpsInput.value = '';
     } else {
-        // showMessage('無効なFPSの値です。正の数値を入力してください。', true);
         dom.fpsInput.value = '';
+        if(dom.m_fpsInput) dom.m_fpsInput.value = '';
     }
 }
 
@@ -283,13 +307,23 @@ function restartVideo() {
 
 function setPlaybackSpeed(rate) {
     // Update active button UI first, this can be done anytime.
-    [dom.speedBtn1x, dom.speedBtn15x, dom.speedBtn2x].forEach(btn => {
-        btn.classList.remove('active-speed');
+    const allSpeedBtns = [dom.speedBtn1x, dom.speedBtn15x, dom.speedBtn2x];
+    if (dom.m_speedBtn1x) allSpeedBtns.push(dom.m_speedBtn1x, dom.m_speedBtn15x, dom.m_speedBtn2x);
+
+    allSpeedBtns.forEach(btn => {
+        if(btn) btn.classList.remove('active', 'active-speed');
     });
 
-    if (rate === 1.0) dom.speedBtn1x.classList.add('active-speed');
-    else if (rate === 1.5) dom.speedBtn15x.classList.add('active-speed');
-    else if (rate === 2.0) dom.speedBtn2x.classList.add('active-speed');
+    if (rate === 1.0) {
+        if(dom.speedBtn1x) dom.speedBtn1x.classList.add('active-speed');
+        if(dom.m_speedBtn1x) dom.m_speedBtn1x.classList.add('active');
+    } else if (rate === 1.5) {
+        if(dom.speedBtn15x) dom.speedBtn15x.classList.add('active-speed');
+        if(dom.m_speedBtn15x) dom.m_speedBtn15x.classList.add('active');
+    } else if (rate === 2.0) {
+        if(dom.speedBtn2x) dom.speedBtn2x.classList.add('active-speed');
+        if(dom.m_speedBtn2x) dom.m_speedBtn2x.classList.add('active');
+    }
 
     // Only set playback rate if video is loaded
     if (!state.videoLoaded) return;
@@ -340,6 +374,7 @@ function getCanvasCoordinates(event) {
         offsetX = 0;
         offsetY = (containerRect.height - videoDisplayHeight) / 2;
     }
+
 
     const clickRelativeToVideoX = unTransformedX - offsetX;
     const clickRelativeToVideoY = unTransformedY - offsetY;
@@ -446,6 +481,45 @@ function handlePanEnd() {
     }
 }
 
+function getDistance(touches) {
+    const [touch1, touch2] = touches;
+    return Math.sqrt(Math.pow(touch2.clientX - touch1.clientX, 2) + Math.pow(touch2.clientY - touch1.clientY, 2));
+}
+
+function handleTouchStart(event) {
+    event.preventDefault();
+    if (event.touches.length === 2) {
+        state.pinching = true;
+        state.initialPinchDistance = getDistance(event.touches);
+    } else if (event.touches.length === 1 && state.zoom > 1) {
+        handlePanStart(event.touches[0]);
+    }
+}
+
+function handleTouchMove(event) {
+    event.preventDefault();
+    if (state.pinching && event.touches.length === 2) {
+        const newPinchDistance = getDistance(event.touches);
+        const scale = newPinchDistance / state.initialPinchDistance;
+        state.zoom = Math.max(1.0, state.zoom * scale);
+        updateTransform();
+        state.initialPinchDistance = newPinchDistance; // Update for continuous zoom
+    } else if (state.isPanning && event.touches.length === 1) {
+        handlePanMove(event.touches[0]);
+    }
+}
+
+function handleTouchEnd(event) {
+    event.preventDefault();
+    if (state.pinching) {
+        state.pinching = false;
+        state.initialPinchDistance = 0;
+    }
+    if (state.isPanning) {
+        handlePanEnd();
+    }
+}
+
 
 // =================================================================
 // Time Recording
@@ -474,9 +548,11 @@ function deleteLastPoint() {
 }
 
 function renderLapTimesTable() {
-    const { el, data } = state.timeRecords[RECORD_TYPES.LAP];
+    const { els, data } = state.timeRecords[RECORD_TYPES.LAP];
+    if (!els || els.length === 0) return;
+
     const newRows = data.map((time, i) => {
-        const lap = (i > 0) ? (time - data[i-1]) : 0;
+        const lap = (i > 0) ? (time - data[i - 1]) : 0;
         const total = (i > 0) ? (time - data[0]) : 0;
         return createTableRow([
             i + 1,
@@ -485,11 +561,19 @@ function renderLapTimesTable() {
             (i > 0) ? total.toFixed(3) : '-'
         ]);
     });
-    el.replaceChildren(...newRows);
+
+    els.forEach((el, index) => {
+        if (el) {
+            const rowsForThisTable = (index === 0) ? newRows : newRows.map(row => row.cloneNode(true));
+            el.replaceChildren(...rowsForThisTable);
+        }
+    });
 }
 
 function renderTempoTimesTable() {
-    const { el, data } = state.timeRecords[RECORD_TYPES.TEMPO];
+    const { els, data } = state.timeRecords[RECORD_TYPES.TEMPO];
+    if (!els || els.length === 0) return;
+    
     const newRows = data.map((time, i) => {
         const lap = (i > 0) ? (time - data[i-1]) : 0;
         const calcValue = (i > 0) ? (lap / 3).toFixed(3) : '-';
@@ -500,12 +584,21 @@ function renderTempoTimesTable() {
             calcValue
         ]);
     });
-    el.replaceChildren(...newRows);
+    
+    els.forEach((el, index) => {
+        if (el) {
+            const rowsForThisTable = (index === 0) ? newRows : newRows.map(row => row.cloneNode(true));
+            el.replaceChildren(...rowsForThisTable);
+        }
+    });
 }
 
 function renderStrokeCount() {
-    if (!dom.strokeCountDisplay) return;
-    dom.strokeCountDisplay.textContent = state.timeRecords[RECORD_TYPES.STROKE].data.length;
+    const { els, data } = state.timeRecords[RECORD_TYPES.STROKE];
+    if (!els) return;
+    els.forEach(el => {
+        if(el) el.textContent = data.length;
+    });
 }
 
 
@@ -561,6 +654,7 @@ function resetAll() {
     dom.videoFile.value = '';
     dom.mainContent.style.display = 'none';
     dom.fileSelectorContainer.style.display = 'block';
+    document.body.classList.remove('video-loaded'); // Remove class from body
     showMessage("新しい動画を選択してください。", false);
 }
 
@@ -643,6 +737,84 @@ function handleKeyUp(event) {
         }
     }
     delete state.keysPressed[releasedKey];
+}
+
+// =================================================================
+// Mobile UI
+// =================================================================
+function initializeMobileUI() {
+    // New mobile UI elements
+    dom.m_skip_rewind_btn = document.getElementById('m-skip-rewind-btn');
+    dom.m_prev_frame_btn = document.getElementById('m-prev-frame-btn');
+    dom.m_play_pause_btn = document.getElementById('m-play-pause-btn');
+    dom.m_next_frame_btn = document.getElementById('m-next-frame-btn');
+    dom.m_skip_forward_btn = document.getElementById('m-skip-forward-btn');
+    dom.m_record_lap_btn = document.getElementById('m-record-lap-btn');
+    dom.m_record_tempo_btn = document.getElementById('m-record-tempo-btn');
+    dom.m_record_stroke_btn = document.getElementById('m-record-stroke-btn');
+    dom.right_panel_tab = document.getElementById('right-panel-tab');
+    dom.bottom_panel_tab = document.getElementById('bottom-panel-tab');
+    dom.right_panel = document.getElementById('right-panel');
+    dom.bottom_panel = document.getElementById('bottom-panel');
+    dom.m_restart_btn = document.getElementById('m-restart-btn');
+    dom.m_choose_video_btn = document.getElementById('m-choose-video-btn');
+    dom.m_reset_lines_btn = document.getElementById('m-reset-lines-btn');
+    dom.m_reset_times_btn = document.getElementById('m-reset-times-btn');
+    dom.m_fps_input = document.getElementById('m-fps-input');
+    dom.m_apply_fps_btn = document.getElementById('m-apply-fps-btn');
+    dom.close_right_panel_btn = document.getElementById('close-right-panel-btn');
+    dom.close_bottom_panel_btn = document.getElementById('close-bottom-panel-btn');
+
+
+    // --- Event Listeners for new Mobile Buttons ---
+    if(dom.m_play_pause_btn) dom.m_play_pause_btn.addEventListener('click', togglePlayPause);
+    if(dom.m_prev_frame_btn) dom.m_prev_frame_btn.addEventListener('click', () => stepFrame(-1));
+    if(dom.m_next_frame_btn) dom.m_next_frame_btn.addEventListener('click', () => stepFrame(1));
+    if(dom.m_skip_rewind_btn) dom.m_skip_rewind_btn.addEventListener('click', () => skipTime(-DEFAULTS.SKIP_TIME_SECONDS));
+    if(dom.m_skip_forward_btn) dom.m_skip_forward_btn.addEventListener('click', () => skipTime(DEFAULTS.SKIP_TIME_SECONDS));
+
+    if(dom.m_record_lap_btn) dom.m_record_lap_btn.addEventListener('click', () => recordTime(RECORD_TYPES.LAP));
+    if(dom.m_record_tempo_btn) dom.m_record_tempo_btn.addEventListener('click', () => recordTime(RECORD_TYPES.TEMPO));
+    if(dom.m_record_stroke_btn) dom.m_record_stroke_btn.addEventListener('click', () => recordTime(RECORD_TYPES.STROKE));
+
+    // Panel Toggling
+    if(dom.right_panel_tab) {
+        dom.right_panel_tab.addEventListener('click', () => {
+            dom.right_panel.classList.add('open');
+        });
+    }
+    if(dom.close_right_panel_btn) {
+        dom.close_right_panel_btn.addEventListener('click', () => {
+            dom.right_panel.classList.remove('open');
+        });
+    }
+    if(dom.bottom_panel_tab) {
+        dom.bottom_panel_tab.addEventListener('click', () => {
+            dom.bottom_panel.classList.add('open');
+        });
+    }
+    if(dom.close_bottom_panel_btn) {
+        dom.close_bottom_panel_btn.addEventListener('click', () => {
+            dom.bottom_panel.classList.remove('open');
+        });
+    }
+
+    // Bottom panel controls
+    if(dom.m_restart_btn) dom.m_restart_btn.addEventListener('click', restartVideo);
+    if(dom.m_choose_video_btn) dom.m_choose_video_btn.addEventListener('click', resetAll);
+    if(dom.m_reset_lines_btn) dom.m_reset_lines_btn.addEventListener('click', resetLinesOnly);
+    if(dom.m_reset_times_btn) dom.m_reset_times_btn.addEventListener('click', resetAllTimes);
+    if(dom.m_apply_fps_btn) dom.m_apply_fps_btn.addEventListener('click', () => {
+        const newFPS = parseFloat(dom.m_fps_input.value);
+        if (!isNaN(newFPS) && newFPS > 0) {
+            state.videoFPS = newFPS;
+            dom.fpsDisplay.textContent = `FPS: ${state.videoFPS.toFixed(1)}`;
+            dom.m_fps_input.value = '';
+            dom.m_fps_input.placeholder = state.videoFPS.toFixed(1);
+        } else {
+            dom.m_fps_input.value = '';
+        }
+    });
 }
 
 // =================================================================
