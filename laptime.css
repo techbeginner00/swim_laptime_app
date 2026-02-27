@@ -169,9 +169,9 @@ html, body {
         }
 
 /* ================================================================== */
-/* Mobile Pro Layout (max-width: 900px and landscape)                */
+/* Mobile Pro Layout (max-width: 1280px)                              */
 /* ================================================================== */
-@media (max-width: 900px) and (orientation: landscape) {
+@media (max-width: 1280px) {
     /* --- Base Layout --- */
     #main-content {
         display: flex !important;
