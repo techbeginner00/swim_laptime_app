@@ -169,9 +169,9 @@ html, body {
         }
 
 /* ================================================================== */
-/* Mobile Pro Layout (max-width: 1280px)                              */
+/* Mobile Pro Layout (max-width: 1200px)               */
 /* ================================================================== */
-@media (max-width: 1000px) {
+@media (max-width: 1200px) {
     /* --- Base Layout --- */
     #main-content {
         display: flex !important;
@@ -234,17 +234,17 @@ html, body {
         background: none;
         border: none;
         color: white;
-        font-size: 0.9rem;
+        font-size: 1.35rem; /* 0.9 * 1.5 */
         margin: 0 0.25rem;
-        padding: 0.25rem;
+        padding: 0.375rem; /* 0.25 * 1.5 */
         line-height: 1;
     }
     
     .play-pause-btn {
         background-color: #4F46E5;
         border-radius: 50%;
-        width: 25px;
-        height: 25px;
+        width: 38px; /* 25 * 1.5 */
+        height: 38px; /* 25 * 1.5 */
     }
 
     .frame-controls {
@@ -264,11 +264,11 @@ html, body {
         background: none;
         border: none;
         color: white;
-        font-size: 0.5rem;
+        font-size: 0.75rem; /* 0.5 * 1.5 */
         background-color: rgba(60, 60, 60, 0.9);
         border-radius: 50%;
-        width: 30px;
-        height: 30px;
+        width: 45px; /* 30 * 1.5 */
+        height: 45px; /* 30 * 1.5 */
         display: flex;
         align-items: center;
         justify-content: center;
@@ -278,8 +278,8 @@ html, body {
     .panel-tab {
         writing-mode: vertical-rl;
         text-orientation: mixed;
-        padding: 0.5rem 0.25rem;
-        font-size: 0.6rem;
+        padding: 0.75rem 0.375rem; /* (0.5rem 0.25rem) * 1.5 */
+        font-size: 0.9rem; /* 0.6 * 1.5 */
         cursor: pointer;
         z-index: 99; /* Ensure tabs are always on top */
     }
@@ -291,7 +291,7 @@ html, body {
         background: none;
         border: none;
         color: white;
-        font-size: 0.75rem;
+        font-size: 1.125rem; /* 0.75 * 1.5 */
         line-height: 1;
         cursor: pointer;
     }
@@ -316,7 +316,7 @@ html, body {
         border-top-right-radius: 1.5rem;
         border-bottom-left-radius: 0;
         border-bottom-right-radius: 0;
-        padding: 0.5rem 1.5rem;
+        padding: 0.75rem 2.25rem; /* (0.5rem 1.5rem) * 1.5 */
     }
 
     .collapsible-panel {
@@ -358,8 +358,8 @@ html, body {
     }
 
     .panel-btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.6rem;
+        padding: 0.375rem 0.75rem; /* (0.25rem 0.5rem) * 1.5 */
+        font-size: 0.9rem; /* 0.6 * 1.5 */
         border: 1px solid white;
         border-radius: 0.5rem;
         background-color: #4B5563;
